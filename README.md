@@ -1,7 +1,10 @@
 # OAI API Checker
 Program that allows you to check all the available information about your OAI API key
+
 Basically, you put in one or an array of keys and the program analyzes them for you.
+
 It prints out if the key is glitched (detects most glitched keys with very high accuracy), if gpt-4 is accessible and lots of other info, including key limits, usage, and expiration date.
+
 Program works really fast (around 10 seconds on 20+ keys) and reliable. Just in case, the program will generate a .log file where all debug info will be stored. Feel free to send them to me in case of bugs and errors.
 
 In this repository, you can find a compiled .exe file of the program (all necessary libraries included), as well as a source Python code with a list of modules to install.
