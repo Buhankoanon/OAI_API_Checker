@@ -1,4 +1,4 @@
-# OAI_API_Checker
+# OAI API Checker
 Program that allows you to check all the available information about your OAI API key
 Basically, you put in one or an array of keys and the program analyzes them for you.
 It prints out if the key is glitched (detects most glitched keys with very high accuracy), if gpt-4 is accessible and lots of other info, including key limits, usage, and expiration date.
