@@ -54,7 +54,7 @@ def is_glitched(api_key, usage_and_limits):
     current_timestamp = datetime.now().timestamp()
     access_expired = current_timestamp > usage_and_limits['access_until']
     total_usage_formatted = get_total_usage(api_key)
-    usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 1
+    usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 10
     return access_expired or usage_exceeded
     
 def check_key(api_key):
