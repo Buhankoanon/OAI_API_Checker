@@ -11,4 +11,4 @@ In this repository, you can find a compiled .exe file of the program (all necess
 
 In order to run the source Python code, you will need Python, pip and modules such as openai, requests, colorama.
 
-There is now also code for Discord bot available right now. You can add it to your secret club and keys all you want.
+There is now also code for Discord bot available. You can add it to your secret club and keys all you want.
