@@ -70,7 +70,7 @@ class OAIKeyChecker:
     @staticmethod
     def is_glitched(access_until, total_usage, hard_limit_usd):
         current_timestamp = datetime.now().timestamp()
-        return current_timestamp > access_until or float(total_usage) >= (hard_limit_usd + 1)
+        return current_timestamp > access_until or float(total_usage) >= (hard_limit_usd + 10)
 
     @staticmethod
     async def get_usage(api_key, start_date, end_date):
