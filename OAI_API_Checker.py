@@ -11,10 +11,8 @@ import logging
 
 colorama.init()
 
-# Configure logging settings
 logging.basicConfig(filename='OAI_API_Checker_logs.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-# Add this function to print messages to both the console and log file
 def log_and_print(message, log_level=logging.INFO):
     print(message)
     logging.log(log_level, message)
