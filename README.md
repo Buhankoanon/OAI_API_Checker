@@ -10,3 +10,5 @@ Program works really fast (around 10 seconds on 20+ keys) and reliable. Just in 
 In this repository, you can find a compiled .exe file of the program (all necessary libraries included), as well as a source Python code.
 
 In order to run the source Python code, you will need Python, pip and modules such as openai, requests, colorama.
+
+There is now also code for Discord bot available right now. You can add it to your secret club and keys all you want.
