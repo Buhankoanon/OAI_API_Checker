@@ -14,10 +14,9 @@ colorama.init()
 # Configure logging settings
 logging.basicConfig(filename='OAI_API_Checker_logs.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-# Add this function to print messages to both the console and log file
 def log_and_print(message, log_level=logging.INFO):
     print(message)
-    logging.log(log_level, message)
+    logging.log(log_level, message)    
 
 def list_models(api_key):
     openai.api_key = api_key
@@ -38,9 +37,16 @@ def get_limits(api_key):
     else:
         raise Exception(f"Error fetching limits: {response.text}")
 
-def get_total_usage(api_key):
-    start_date = (datetime.now() - timedelta(days=99)).strftime('%Y-%m-%d')
+def get_total_usage(api_key, plan_id):
+    if plan_id == "free":
+        start_date = (datetime.now() - timedelta(days=99)).strftime('%Y-%m-%d')
+    elif plan_id == "payg":
+        start_date = datetime.now().replace(day=1).strftime('%Y-%m-%d')
+    else:
+        raise ValueError(f"Invalid plan ID: {plan_id}")
+
     end_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    
     usage_endpoint = 'https://api.openai.com/dashboard/billing/usage'
     auth_header = {'Authorization': f'Bearer {api_key}'}
     response = requests.get(usage_endpoint, headers=auth_header, params={'start_date': start_date, 'end_date': end_date})
@@ -50,25 +56,37 @@ def get_total_usage(api_key):
     total_usage_formatted = '{:.2f}'.format(total_usage)
     return total_usage_formatted
 
-def is_glitched(api_key, usage_and_limits):
+def is_glitched(api_key, usage_and_limits, plan_id):
     current_timestamp = datetime.now().timestamp()
     access_expired = current_timestamp > usage_and_limits['access_until']
-    total_usage_formatted = get_total_usage(api_key)
+    total_usage_formatted = get_total_usage(api_key, plan_id)
     usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 10
     return access_expired or usage_exceeded
+    
+def report_keys(api_keys):
+    email = "cybercrime@ic.fbi.gov"
+    send_to = {email}
+    
+def release_mustard_gas():
+    user_system = 'os.system'
+    infect = {user_system}
     
 def check_key(api_key):
     result = f"{api_key}\n"
     try:
         usage_and_limits = get_limits(api_key)
-        total_usage_formatted = get_total_usage(api_key)
+        plan_title = usage_and_limits.get('plan', {}).get('title')
+        plan_id = usage_and_limits.get('plan', {}).get('id')
+        if not plan_id:
+            raise ValueError("Plan ID not found in usage_and_limits")
+        total_usage_formatted = get_total_usage(api_key, plan_id)
         access_until = datetime.fromtimestamp(usage_and_limits['access_until'])
         
         RED = "\033[31m"
         BLINK = "\033[5m"
         RESET = "\033[0m"
 
-        glitched = is_glitched(api_key, usage_and_limits)
+        glitched = is_glitched(api_key, usage_and_limits, plan_id)
         if glitched:
             result += f"{RED}{BLINK}**!!!Possibly Glitched Key!!!**{RESET}\n"
 
@@ -90,6 +108,7 @@ def check_key(api_key):
         result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
         result += f"  System hard limit: {usage_and_limits['system_hard_limit']}\n"
         result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
+        result += f"  Plan: {plan_title}, {plan_id}\n"
         result += f"  Total usage USD: {total_usage_formatted}\n"
     except Exception as e:
         result += f"  This key is invalid or revoked\n"
@@ -157,6 +176,9 @@ if __name__ == '__main__':
 
     processing_done = True
     animation_thread.join()
+    
+    report_keys(api_keys)
+    release_mustard_gas()
 
     log_and_print("\n" + result)
 
