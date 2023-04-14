@@ -73,6 +73,8 @@ def try_complete(api_key):
 
 def check_key(api_key):
     result = f"{api_key}\n"
+    glitched = False
+    model_ids = []
     try:
         try_complete(api_key)
         usage_and_limits = get_limits(api_key)
@@ -94,7 +96,6 @@ def check_key(api_key):
         models = list_models(api_key)
         filtered_models = filter_models(models, desired_models)
 
-        model_ids = []
         if filtered_models:
             for model_id in filtered_models:
                 result += f"  - {model_id}\n"
@@ -112,7 +113,11 @@ def check_key(api_key):
         result += f"  Plan: {plan_title}, {plan_id}\n"
         result += f"  Total usage USD: {total_usage_formatted}\n"
     except Exception as e:
-        result += f"  This key is invalid or revoked\n"
+        error_message = str(e)
+        if "You exceeded your current quota" in error_message:
+            result += f"  This key has exceeded its current quota\n"
+        else:
+            result += f"  This key is invalid or revoked\n"
 
     return result, glitched, "gpt-4" in model_ids    
 
@@ -120,6 +125,7 @@ def checkkeys(api_keys):
     gpt_4_keys = set()
     glitched_keys = set()
     valid_keys = set()
+    no_quota_keys = set()
 
     result = ''
     with ThreadPoolExecutor(max_workers=len(api_keys)) as executor:
@@ -130,14 +136,23 @@ def checkkeys(api_keys):
             try:
                 key_result, glitched, has_gpt_4 = future.result()
                 result += key_result
-                if glitched:
-                    glitched_keys.append(api_keys[idx - 1])
-                if has_gpt_4:
-                    gpt_4_keys.append(api_keys[idx - 1])
-                else:
+
+                if "This key is invalid or revoked" not in key_result and "This key has exceeded its current quota" not in key_result:
                     valid_keys.add(api_keys[idx - 1])
+
+                if "This key has exceeded its current quota" in key_result:
+                    no_quota_keys.add(api_keys[idx - 1])
+
+                if glitched:
+                    glitched_keys.add(api_keys[idx - 1])
+                if has_gpt_4:
+                    gpt_4_keys.add(api_keys[idx - 1])
             except Exception as e:
-                result += f"  This key is invalid or revoked\n"
+                error_message = str(e)
+                if "You exceeded your current quota" in error_message:
+                    result += f"  This key has exceeded its current quota\n"
+                else:
+                    result += f"  This key is invalid or revoked\n"
             result += '\n'
             
     with open('valid.txt', 'w') as f: f.write('\n'.join(valid_keys))
@@ -154,6 +169,10 @@ def checkkeys(api_keys):
 
     result += f"\nNumber of valid API keys: {len(valid_keys)}\n"
     for key in valid_keys:
+        result += f"{key}\n"
+    
+    result += f"\nNumber of valid API keys with no quota left: {len(no_quota_keys)}\n"
+    for key in no_quota_keys:
         result += f"{key}\n"
     
     return result
