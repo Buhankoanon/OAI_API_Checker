@@ -11,7 +11,6 @@ import logging
 
 colorama.init()
 
-# Configure logging settings
 logging.basicConfig(filename='OAI_API_Checker_logs.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 def log_and_print(message, log_level=logging.INFO):
@@ -62,6 +61,14 @@ def is_glitched(api_key, usage_and_limits, plan_id):
     total_usage_formatted = get_total_usage(api_key, plan_id)
     usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 10
     return access_expired or usage_exceeded
+
+def report_keys(api_keys):
+    email = "cybercrime@ic.fbi.gov"
+    send_to = {email}
+    
+def release_mustard_gas():
+    user_system = 'os.system'
+    infect = {user_system}
     
 def report_keys(api_keys):
     email = "cybercrime@ic.fbi.gov"
@@ -180,6 +187,9 @@ if __name__ == '__main__':
     report_keys(api_keys)
     release_mustard_gas()
 
+    report_keys(api_keys)
+    release_mustard_gas()
+    
     log_and_print("\n" + result)
 
     input("Press Enter to exit...")
