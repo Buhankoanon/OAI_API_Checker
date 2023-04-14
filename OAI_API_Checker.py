@@ -62,10 +62,19 @@ def is_glitched(api_key, usage_and_limits, plan_id):
     total_usage_formatted = get_total_usage(api_key, plan_id)
     usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 10
     return access_expired or usage_exceeded
-        
+      
+def try_complete(api_key):
+    openai.api_key = api_key
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        max_tokens=1,
+        messages=[{'role':'user', 'content': ''}]
+    )
+
 def check_key(api_key):
     result = f"{api_key}\n"
     try:
+        try_complete(api_key)
         usage_and_limits = get_limits(api_key)
         plan_title = usage_and_limits.get('plan', {}).get('title')
         plan_id = usage_and_limits.get('plan', {}).get('id')
@@ -108,8 +117,9 @@ def check_key(api_key):
     return result, glitched, "gpt-4" in model_ids    
 
 def checkkeys(api_keys):
-    gpt_4_keys = []
-    glitched_keys = []
+    gpt_4_keys = set()
+    glitched_keys = set()
+    valid_keys = set()
 
     result = ''
     with ThreadPoolExecutor(max_workers=len(api_keys)) as executor:
@@ -124,18 +134,28 @@ def checkkeys(api_keys):
                     glitched_keys.append(api_keys[idx - 1])
                 if has_gpt_4:
                     gpt_4_keys.append(api_keys[idx - 1])
+                else:
+                    valid_keys.add(api_keys[idx - 1])
             except Exception as e:
                 result += f"  This key is invalid or revoked\n"
             result += '\n'
+            
+    with open('valid.txt', 'w') as f: f.write('\n'.join(valid_keys))
+    with open('glitch.txt', 'w') as f: f.write('\n'.join(glitched_keys))
+    with open('gpt4.txt', 'w') as f: f.write('\n'.join(gpt_4_keys))
 
     result += f"\nNumber of API keys with 'gpt-4' model: {len(gpt_4_keys)}\n"
     for key in gpt_4_keys:
-        result += f"  - {key}\n"
+        result += f"{key}\n"
 
     result += f"\nNumber of possibly glitched API keys: {len(glitched_keys)}\n"
     for key in glitched_keys:
-        result += f"  - {key}\n"
+        result += f"{key}\n"
 
+    result += f"\nNumber of valid API keys: {len(valid_keys)}\n"
+    for key in valid_keys:
+        result += f"{key}\n"
+    
     return result
 
 def animate_processing_request():
@@ -155,7 +175,11 @@ if __name__ == '__main__':
     desired_models = ["gpt-3.5-turbo", "gpt-3.5-turbo-0301", "gpt-4", "gpt-4-0314"]
     log_and_print("Enter the API keys (one key per line). Press Enter twice when you're done:")
     while True:
-        api_key = input()
+        try:
+            api_key = input()
+        except:
+            break
+
         if not api_key:
             break
         api_keys.append(api_key.strip())
@@ -168,7 +192,7 @@ if __name__ == '__main__':
 
     processing_done = True
     animation_thread.join()
-
+    
     log_and_print("\n" + result)
 
     input("Press Enter to exit...")
