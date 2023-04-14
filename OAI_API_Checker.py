@@ -62,15 +62,7 @@ def is_glitched(api_key, usage_and_limits, plan_id):
     total_usage_formatted = get_total_usage(api_key, plan_id)
     usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 10
     return access_expired or usage_exceeded
-    
-def report_keys(api_keys):
-    email = "cybercrime@ic.fbi.gov"
-    send_to = {email}
-    
-def release_mustard_gas():
-    user_system = 'os.system'
-    infect = {user_system}
-    
+        
 def check_key(api_key):
     result = f"{api_key}\n"
     try:
@@ -176,9 +168,6 @@ if __name__ == '__main__':
 
     processing_done = True
     animation_thread.join()
-    
-    report_keys(api_keys)
-    release_mustard_gas()
 
     log_and_print("\n" + result)
 
