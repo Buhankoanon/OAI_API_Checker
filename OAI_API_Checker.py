@@ -58,7 +58,12 @@ def get_total_usage(api_key, plan_id):
 
 def is_glitched(api_key, usage_and_limits, plan_id):
     current_timestamp = datetime.now().timestamp()
-    access_expired = current_timestamp > usage_and_limits['access_until']
+    
+    if plan_id == "payg":
+        access_expired = False
+    else:
+        access_expired = current_timestamp > usage_and_limits['access_until']
+    
     total_usage_formatted = get_total_usage(api_key, plan_id)
     usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 10
     return access_expired or usage_exceeded
@@ -71,27 +76,31 @@ def try_complete(api_key):
         messages=[{'role':'user', 'content': ''}]
     )
 
+RED = "\033[31m"
+YELLOW = "\033[33m"
+GREEN = "\033[32m"
+BLINK = "\033[5m"
+RESET = "\033[0m"
+
 def check_key(api_key):
     result = f"{api_key}\n"
     glitched = False
     model_ids = []
+    
+    usage_and_limits = get_limits(api_key)
+    plan_title = usage_and_limits.get('plan', {}).get('title')
+    plan_id = usage_and_limits.get('plan', {}).get('id')
+    if not plan_id:
+        raise ValueError("Plan ID not found in usage_and_limits")
+    total_usage_formatted = get_total_usage(api_key, plan_id)
+    access_until = datetime.fromtimestamp(usage_and_limits['access_until'])
+    
     try:
         try_complete(api_key)
-        usage_and_limits = get_limits(api_key)
-        plan_title = usage_and_limits.get('plan', {}).get('title')
-        plan_id = usage_and_limits.get('plan', {}).get('id')
-        if not plan_id:
-            raise ValueError("Plan ID not found in usage_and_limits")
-        total_usage_formatted = get_total_usage(api_key, plan_id)
-        access_until = datetime.fromtimestamp(usage_and_limits['access_until'])
-        
-        RED = "\033[31m"
-        BLINK = "\033[5m"
-        RESET = "\033[0m"
 
         glitched = is_glitched(api_key, usage_and_limits, plan_id)
         if glitched:
-            result += f"{RED}{BLINK}**!!!Possibly Glitched Key!!!**{RESET}\n"
+            result += f"{GREEN}{BLINK}**!!!Possibly Glitched Key!!!**{RESET}\n"
 
         models = list_models(api_key)
         filtered_models = filter_models(models, desired_models)
@@ -115,9 +124,14 @@ def check_key(api_key):
     except Exception as e:
         error_message = str(e)
         if "You exceeded your current quota" in error_message:
-            result += f"  This key has exceeded its current quota\n"
+            result += f"{YELLOW}  This key has exceeded its current quota{RESET}\n"
+            result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
+            result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
+            result += f"  Plan: {plan_title}, {plan_id}\n"
+            result += f"  Total usage USD: {total_usage_formatted}\n"
         else:
-            result += f"  This key is invalid or revoked\n"
+            result += f"{RED}  This key is invalid or revoked{RESET}\n"
 
     return result, glitched, "gpt-4" in model_ids    
 
@@ -150,9 +164,10 @@ def checkkeys(api_keys):
             except Exception as e:
                 error_message = str(e)
                 if "You exceeded your current quota" in error_message:
-                    result += f"  This key has exceeded its current quota\n"
+                    result += f"{YELLOW}  This key has exceeded its current quota{RESET}\n"
                 else:
-                    result += f"  This key is invalid or revoked\n"
+                    result += f"{api_keys[idx - 1]}\n"
+                    result += f"{RED}  This key is invalid or revoked{RESET}\n"
             result += '\n'
             
     with open('valid.txt', 'w') as f: f.write('\n'.join(valid_keys))
