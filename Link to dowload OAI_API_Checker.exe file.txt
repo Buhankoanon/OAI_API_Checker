@@ -1,0 +1,2 @@
+I have moved the OAI_API_Checker.exe from github itself to external drive (Proton Drive) in order to save space on your PC (I was retarder and was committing binary files)
+Now you can download the OAI_API_Checker.exe here: https://drive.proton.me/urls/GMAJFVE5M8#aDiu6lAPNdcx
