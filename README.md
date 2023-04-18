@@ -15,6 +15,6 @@ There is now also code for Discord bot available (discontinued). You can add it 
 
 UPD:
 
-Moved the .exe file into the separate storage drive (Proton Drive). Now you can download the OAI_API_Checker.exe from here:
+Moved the .exe file into the separate storage drive (Proton Drive). Now you can download it from here:
 
-https://drive.proton.me/urls/GMAJFVE5M8#aDiu6lAPNdcx
+OAI_API_Checker.exe - https://drive.proton.me/urls/GMAJFVE5M8#aDiu6lAPNdcx
