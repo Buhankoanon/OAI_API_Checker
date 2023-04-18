@@ -14,5 +14,7 @@ In order to run the source Python code, you will need Python, pip and modules su
 There is now also code for Discord bot available (discontinued). You can add it to your secret club and check keys all you want.
 
 UPD:
+
 Moved the .exe file into the separate storage drive (Proton Drive). Now you can download the OAI_API_Checker.exe from here:
+
 https://drive.proton.me/urls/GMAJFVE5M8#aDiu6lAPNdcx
