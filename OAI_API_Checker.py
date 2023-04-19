@@ -8,6 +8,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import colorama
 import logging
+from math import ceil
 
 colorama.init()
 
@@ -56,7 +57,7 @@ def get_total_usage(api_key, plan_id):
     total_usage_formatted = '{:.2f}'.format(total_usage)
     return total_usage_formatted
 
-def is_glitched(api_key, usage_and_limits, plan_id):
+def is_glitched(api_key, usage_and_limits, plan_id, total_usage_formatted):
     current_timestamp = datetime.now().timestamp()
     
     if plan_id == "payg":
@@ -94,23 +95,24 @@ def check_key(api_key):
         raise ValueError("Plan ID not found in usage_and_limits")
     total_usage_formatted = get_total_usage(api_key, plan_id)
     access_until = datetime.fromtimestamp(usage_and_limits['access_until'])
+    org_id = usage_and_limits.get('account_name', '')
+    
+    models = list_models(api_key)
+    filtered_models = filter_models(models, desired_models)
+
+    if filtered_models:
+        for model_id in filtered_models:
+            result += f"  - {model_id}\n"
+            model_ids.append(model_id)
+    else:
+        result += "  No desired models available.\n"
     
     try:
         try_complete(api_key)
 
-        glitched = is_glitched(api_key, usage_and_limits, plan_id)
+        glitched = is_glitched(api_key, usage_and_limits, plan_id, total_usage_formatted)
         if glitched:
             result += f"{GREEN}{BLINK}**!!!Possibly Glitched Key!!!**{RESET}\n"
-
-        models = list_models(api_key)
-        filtered_models = filter_models(models, desired_models)
-
-        if filtered_models:
-            for model_id in filtered_models:
-                result += f"  - {model_id}\n"
-                model_ids.append(model_id)
-        else:
-            result += "  No desired models available.\n"
 
         result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
         result += f"  Soft limit: {usage_and_limits['soft_limit']}\n"
@@ -120,6 +122,7 @@ def check_key(api_key):
         result += f"  System hard limit: {usage_and_limits['system_hard_limit']}\n"
         result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
         result += f"  Plan: {plan_title}, {plan_id}\n"
+        result += f"  OrgID: {org_id}\n"
         result += f"  Total usage USD: {total_usage_formatted}\n"
     except Exception as e:
         error_message = str(e)
@@ -129,11 +132,12 @@ def check_key(api_key):
             result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
             result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
             result += f"  Plan: {plan_title}, {plan_id}\n"
+            result += f"  OrgID: {org_id}\n"
             result += f"  Total usage USD: {total_usage_formatted}\n"
         else:
             result += f"{RED}  This key is invalid or revoked{RESET}\n"
 
-    return result, glitched, "gpt-4" in model_ids    
+    return result, glitched, "gpt-4" in model_ids, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted)
 
 def checkkeys(api_keys):
     gpt_4_keys = set()
@@ -142,37 +146,55 @@ def checkkeys(api_keys):
     no_quota_keys = set()
 
     result = ''
-    with ThreadPoolExecutor(max_workers=len(api_keys)) as executor:
+    balances = {}
+    keys_by_limit = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(check_key, api_key) for api_key in api_keys]
 
         for idx, future in enumerate(futures, start=1):
             result += f"API Key {idx}:\n"
+            key = api_keys[idx - 1]
             try:
-                key_result, glitched, has_gpt_4 = future.result()
+                key_result, glitched, has_gpt_4, org_id, limit, usage = future.result()
+                balance = max(limit - usage, 0)             
+                balances[org_id] = balance
+
+                limit = ceil(limit / 10) * 10
+                
                 result += key_result
 
                 if "This key is invalid or revoked" not in key_result and "This key has exceeded its current quota" not in key_result:
-                    valid_keys.add(api_keys[idx - 1])
+                    valid_keys.add(key)
+                    limit_key = limit * 10 + (4 if has_gpt_4 else 3)
+                    same_limit_keys = keys_by_limit.get(limit_key, [])
+                    same_limit_keys.append(key)
+                    keys_by_limit[limit_key] = same_limit_keys
 
                 if "This key has exceeded its current quota" in key_result:
-                    no_quota_keys.add(api_keys[idx - 1])
+                    no_quota_keys.add(key)
 
                 if glitched:
-                    glitched_keys.add(api_keys[idx - 1])
+                    glitched_keys.add(key)
                 if has_gpt_4:
-                    gpt_4_keys.add(api_keys[idx - 1])
+                    gpt_4_keys.add(key)
             except Exception as e:
                 error_message = str(e)
                 if "You exceeded your current quota" in error_message:
                     result += f"{YELLOW}  This key has exceeded its current quota{RESET}\n"
                 else:
-                    result += f"{api_keys[idx - 1]}\n"
+                    result += f"{key}\n"
                     result += f"{RED}  This key is invalid or revoked{RESET}\n"
             result += '\n'
             
     with open('valid.txt', 'w') as f: f.write('\n'.join(valid_keys))
     with open('glitch.txt', 'w') as f: f.write('\n'.join(glitched_keys))
     with open('gpt4.txt', 'w') as f: f.write('\n'.join(gpt_4_keys))
+    
+    with open('limits.txt', 'w') as f:
+        for limit, same_limit_keys in sorted(keys_by_limit.items(), key=lambda x: x[0]):
+            f.write(f'{limit}:\n')
+            f.write('\n'.join(same_limit_keys))
+            f.write(f'\n\n')
 
     result += f"\nNumber of API keys with 'gpt-4' model: {len(gpt_4_keys)}\n"
     for key in gpt_4_keys:
@@ -189,6 +211,9 @@ def checkkeys(api_keys):
     result += f"\nNumber of valid API keys with no quota left: {len(no_quota_keys)}\n"
     for key in no_quota_keys:
         result += f"{key}\n"
+        
+    great_total = sum(balances.values())
+    result += f"\nTotal limit: {great_total:.2f}\n"
     
     return result
 
