@@ -231,7 +231,7 @@ def animate_processing_request():
 
 if __name__ == '__main__':
     api_keys = []
-    desired_models = ["gpt-3.5-turbo", "gpt-3.5-turbo-0301", "gpt-4", "gpt-4-0314"]
+    desired_models = ["gpt-3.5-turbo", "gpt-3.5-turbo-0301", "gpt-4", "gpt-4-0314", "gpt-4-32k", "gpt-4-32k-0314"]
     log_and_print("Enter the API keys (one key per line). Press Enter twice when you're done:")
     while True:
         try:
