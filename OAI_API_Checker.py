@@ -85,6 +85,7 @@ RESET = "\033[0m"
 
 def check_key(api_key):
     result = f"{api_key}\n"
+    has_gpt_4_32k = False
     glitched = False
     model_ids = []
     
@@ -106,6 +107,9 @@ def check_key(api_key):
             model_ids.append(model_id)
     else:
         result += "  No desired models available.\n"
+    
+    has_gpt_4 = "gpt-4" in model_ids
+    has_gpt_4_32k = "gpt-4-32k" in model_ids
     
     try:
         try_complete(api_key)
@@ -137,10 +141,11 @@ def check_key(api_key):
         else:
             result += f"{RED}  This key is invalid or revoked{RESET}\n"
 
-    return result, glitched, "gpt-4" in model_ids, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted)
+    return result, glitched, has_gpt_4, has_gpt_4_32k, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted)
 
 def checkkeys(api_keys):
     gpt_4_keys = set()
+    gpt_4_32k_keys = set()
     glitched_keys = set()
     valid_keys = set()
     no_quota_keys = set()
@@ -155,7 +160,7 @@ def checkkeys(api_keys):
             result += f"API Key {idx}:\n"
             key = api_keys[idx - 1]
             try:
-                key_result, glitched, has_gpt_4, org_id, limit, usage = future.result()
+                key_result, glitched, has_gpt_4, has_gpt_4_32k, org_id, limit, usage = future.result()
                 balance = max(limit - usage, 0)             
                 balances[org_id] = balance
 
@@ -177,6 +182,8 @@ def checkkeys(api_keys):
                     glitched_keys.add(key)
                 if has_gpt_4:
                     gpt_4_keys.add(key)
+                if has_gpt_4_32k:
+                    gpt_4_32k_keys.add(key)
             except Exception as e:
                 error_message = str(e)
                 if "You exceeded your current quota" in error_message:
@@ -189,6 +196,7 @@ def checkkeys(api_keys):
     with open('valid.txt', 'w') as f: f.write('\n'.join(valid_keys))
     with open('glitch.txt', 'w') as f: f.write('\n'.join(glitched_keys))
     with open('gpt4.txt', 'w') as f: f.write('\n'.join(gpt_4_keys))
+    with open('gpt4-32k.txt', 'w') as f: f.write('\n'.join(gpt_4_32k_keys))
     
     with open('limits.txt', 'w') as f:
         for limit, same_limit_keys in sorted(keys_by_limit.items(), key=lambda x: x[0]):
@@ -198,6 +206,10 @@ def checkkeys(api_keys):
 
     result += f"\nNumber of API keys with 'gpt-4' model: {len(gpt_4_keys)}\n"
     for key in gpt_4_keys:
+        result += f"{key}\n"
+        
+    result += f"\nNumber of API keys with 'gpt-4-32k' model: {len(gpt_4_32k_keys)}\n"
+    for key in gpt_4_32k_keys:
         result += f"{key}\n"
 
     result += f"\nNumber of possibly glitched API keys: {len(glitched_keys)}\n"
