@@ -151,9 +151,9 @@ def checkkeys(api_keys):
     no_quota_keys = set()
 
     result = ''
-    balances = {}
+    balances = []
     keys_by_limit = {}
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=100) as executor:
         futures = [executor.submit(check_key, api_key) for api_key in api_keys]
 
         for idx, future in enumerate(futures, start=1):
@@ -161,8 +161,8 @@ def checkkeys(api_keys):
             key = api_keys[idx - 1]
             try:
                 key_result, glitched, has_gpt_4, has_gpt_4_32k, org_id, limit, usage = future.result()
-                balance = max(limit - usage, 0)             
-                balances[org_id] = balance
+                balance = max(limit - usage, 0)
+                balances.append(balance)
 
                 limit = ceil(limit / 10) * 10
                 
@@ -224,7 +224,7 @@ def checkkeys(api_keys):
     for key in no_quota_keys:
         result += f"{key}\n"
         
-    great_total = sum(balances.values())
+    great_total = sum(balances)
     result += f"\nTotal limit: {great_total:.2f}\n"
     
     return result
