@@ -119,11 +119,8 @@ def check_key(api_key):
             result += f"{GREEN}{BLINK}**!!!Possibly Glitched Key!!!**{RESET}\n"
 
         result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        result += f"  Soft limit: {usage_and_limits['soft_limit']}\n"
         result += f"  Soft limit USD: {usage_and_limits['soft_limit_usd']}\n"
-        result += f"  Hard limit: {usage_and_limits['hard_limit']}\n"
         result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
-        result += f"  System hard limit: {usage_and_limits['system_hard_limit']}\n"
         result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
         result += f"  Plan: {plan_title}, {plan_id}\n"
         result += f"  OrgID: {org_id}\n"
