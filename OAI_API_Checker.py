@@ -138,8 +138,10 @@ def check_key(api_key):
             result += f"  Plan: {plan_title}, {plan_id}\n"
             result += f"  OrgID: {org_id}\n"
             result += f"  Total usage USD: {total_usage_formatted}\n"
-        else:
+        elif "Incorrect API key provided" in error_message:
             result += f"{RED}  This key is invalid or revoked{RESET}\n"
+        else:
+            result += f"{RED} Unexpected Error: {error_message}{RESET}\n"
 
     return result, glitched, has_gpt_4, has_gpt_4_32k, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted)
 
@@ -168,7 +170,7 @@ def checkkeys(api_keys):
                 
                 result += key_result
 
-                if "This key is invalid or revoked" not in key_result and "This key has exceeded its current quota" not in key_result:
+                if "This key is invalid or revoked" not in key_result and "This key has exceeded its current quota" not in key_result and "Unexpected Error" not in key_result:
                     valid_keys.add(key)
                     limit_key = limit * 10 + (4 if has_gpt_4 else 3)
                     same_limit_keys = keys_by_limit.get(limit_key, [])
@@ -188,9 +190,11 @@ def checkkeys(api_keys):
                 error_message = str(e)
                 if "You exceeded your current quota" in error_message:
                     result += f"{YELLOW}  This key has exceeded its current quota{RESET}\n"
-                else:
+                elif "Incorrect API key provided" in error_message:
                     result += f"{key}\n"
-                    result += f"{RED}  This key is invalid or revoked{RESET}\n"
+                    result += f"{RED}  This key is invalid or revoked{RESET}\n"    
+                else:
+                    result += f"{RED} Unexpected Error: {error_message}{RESET}\n"
             result += '\n'
             
     with open('valid.txt', 'w') as f: f.write('\n'.join(valid_keys))
@@ -243,7 +247,7 @@ def animate_processing_request():
 
 if __name__ == '__main__':
     api_keys = []
-    desired_models = ["gpt-3.5-turbo", "gpt-3.5-turbo-0301", "gpt-4", "gpt-4-0314", "gpt-4-32k", "gpt-4-32k-0314"]
+    desired_models = ["gpt-3.5-turbo", "gpt-4", "gpt-4-32k"]
     log_and_print("Enter the API keys (one key per line). Press Enter twice when you're done:")
     while True:
         try:
