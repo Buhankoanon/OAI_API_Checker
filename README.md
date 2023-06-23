@@ -17,4 +17,4 @@ UPD:
 
 Moved the .exe file into the separate storage drive (Proton Drive). Now you can download it from here:
 
-OAI_API_Checker.exe - https://drive.proton.me/urls/DQ6HHEWBZG#oLUYLT5HmZwN
+OAI_API_Checker.exe - https://drive.proton.me/urls/4T2QGJFBGM#fW0YsN9WskCG
