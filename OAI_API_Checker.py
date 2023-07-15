@@ -177,11 +177,11 @@ def checkkeys(api_keys):
                 if "This key has exceeded its current quota" in key_result:
                     no_quota_keys.add(key)
 
-                if glitched:
+                if glitched and "Unexpected Error" not in key_result:
                     glitched_keys.add(key)
-                if has_gpt_4:
+                if has_gpt_4 and "Unexpected Error" not in key_result:
                     gpt_4_keys.add(key)
-                if has_gpt_4_32k:
+                if has_gpt_4_32k and "Unexpected Error" not in key_result:
                     gpt_4_32k_keys.add(key)
             except Exception as e:
                 error_message = str(e)
