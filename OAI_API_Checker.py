@@ -60,7 +60,7 @@ def get_total_usage(api_key, plan_id, retry_count=3):
             return total_usage_formatted
         except requests.exceptions.HTTPError as http_err:
             if '500 Server Error' in str(http_err) or '429 Client Error' in str(http_err):
-                log_and_print(f'Error encountered at getting usage on attempt {attempt+1}: {str(http_err)}. Retrying...')
+                logging.info(f'Error encountered at getting usage on attempt {attempt+1}: {str(http_err)}. Retrying...')
                 time.sleep(5)
                 continue
             else:
@@ -100,6 +100,7 @@ def check_key(api_key, retry_count=3):
     has_gpt_4_32k = False
     glitched = False
     model_ids = []
+    errors = []
     
     usage_and_limits = get_limits(api_key)
     plan_title = usage_and_limits.get('plan', {}).get('title')
@@ -132,7 +133,7 @@ def check_key(api_key, retry_count=3):
             except Exception as e:
                 error_message = str(e)
                 if "The server is overloaded or not ready yet" in error_message:
-                    log_and_print(f'Error encountered when generating a completion on attempt {attempts+1}: {error_message}. Retrying...')
+                    logging.info(f'Error encountered when generating a completion on attempt {attempts+1}: {error_message}. Retrying...')
                     time.sleep(5)
                     continue
                 else:
@@ -163,8 +164,9 @@ def check_key(api_key, retry_count=3):
             result += f"{RED} Error: Your account is not active, please check your billing details on our website.{RESET}\n"
         else:
             result += f"{RED} Unexpected Error at check_key: {error_message}{RESET}\n"
+            errors.append((api_key, error_message))
 
-    return result, glitched, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted)
+    return result, glitched, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted), errors
 
 def checkkeys(api_keys):
     working_gpt_4_keys = set()
@@ -176,11 +178,10 @@ def checkkeys(api_keys):
     glitched_gpt4_keys = set()
     glitched_gpt4_32k_keys = set()
     glitched_turbo_keys = set()
-    unexpected_errors = {}
-
     result = ''
     balances = []
     keys_by_limit = {}
+    total_errors = []
     with ThreadPoolExecutor(max_workers=100) as executor:
         futures = [executor.submit(check_key, api_key) for api_key in api_keys]
 
@@ -188,7 +189,8 @@ def checkkeys(api_keys):
             result += f"API Key {idx}:\n"
             key = api_keys[idx - 1]
             try:
-                key_result, glitched, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, limit, usage = future.result()
+                key_result, glitched, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, limit, usage, errors = future.result()
+                total_errors.extend(errors)
                 balance = max(limit - usage, 0)
                 balances.append(balance)
 
@@ -223,9 +225,6 @@ def checkkeys(api_keys):
                 if glitched and has_only_turbo:
                     glitched_turbo_keys.add(key)
 
-                if "Unexpected Error:" in key_result:
-                    unexpected_errors[key] = key_result.split('Unexpected Error: ')[1]
-
             except Exception as e:
                 error_message = str(e)
                 if "Incorrect API key provided" in error_message:
@@ -239,6 +238,7 @@ def checkkeys(api_keys):
                     result += f"{RED} Error: This key is associated with a deactivated account. If you feel this is an error, contact us through our help center at help.openai.com.{RESET}\n"
                 else:
                     result += f"{RED} Unexpected Error at checkkeys: {error_message}{RESET}\n"
+                    total_errors.append((api_keys[idx - 1], error_message))
             result += '\n'
 
     with open('turbo.txt', 'w') as f:
@@ -271,17 +271,18 @@ def checkkeys(api_keys):
         if len(no_quota_gpt_4_keys) > 0:
             f.write('Valid API keys with GPT-4 model and no quota left:\n')
             f.write('\n'.join(no_quota_gpt_4_keys) + '\n\n')
-    
-    with open('unexpected_errors.txt', 'w') as f:
-        for idx, (key, error) in enumerate(unexpected_errors.items(), start=1):
-            error = error.replace("\033[0m", "")
-            f.write(f"API Key {idx}:\n{key}\nUnexpected Error: {error}\n\n")
 
     with open('limits.txt', 'w') as f:
         for limit, same_limit_keys in sorted(keys_by_limit.items(), key=lambda x: x[0]):
             f.write(f'{limit}:\n')
             f.write('\n'.join(same_limit_keys))
             f.write(f'\n\n')
+
+    with open('unexpected_errors.txt', 'w') as f:
+        for i, (api_key, error) in enumerate(total_errors, start=1):
+            f.write(f"Error #{i}:\n")
+            f.write(f"API Key: {api_key}\n")
+            f.write(f"Error Message: {error}\n\n")
 
     result += f"\nNumber of working API keys with only 'gpt-3.5-turbo' model: {len(working_only_turbo_keys)}\n"
     for key in working_only_turbo_keys:
