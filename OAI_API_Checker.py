@@ -37,7 +37,7 @@ def get_limits(api_key):
     else:
         raise Exception(f"Error fetching limits: {response.text}")
 
-def get_total_usage(api_key, plan_id):
+def get_total_usage(api_key, plan_id, retry_count=3):
     if plan_id == "free":
         start_date = (datetime.now() - timedelta(days=99)).strftime('%Y-%m-%d')
     elif plan_id == "payg":
@@ -46,15 +46,28 @@ def get_total_usage(api_key, plan_id):
         raise ValueError(f"Invalid plan ID: {plan_id}")
 
     end_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-    
+  
     usage_endpoint = 'https://api.openai.com/dashboard/billing/usage'
     auth_header = {'Authorization': f'Bearer {api_key}'}
-    response = requests.get(usage_endpoint, headers=auth_header, params={'start_date': start_date, 'end_date': end_date})
-    response.raise_for_status()
-    usage_data = response.json()
-    total_usage = usage_data.get('total_usage', 0) / 100
-    total_usage_formatted = '{:.2f}'.format(total_usage)
-    return total_usage_formatted
+    
+    for attempt in range(retry_count):
+        try:
+            response = requests.get(usage_endpoint, headers=auth_header, params={'start_date': start_date, 'end_date': end_date})
+            response.raise_for_status()
+            usage_data = response.json()
+            total_usage = usage_data.get('total_usage', 0) / 100
+            total_usage_formatted = '{:.2f}'.format(total_usage)
+            return total_usage_formatted
+        except requests.exceptions.HTTPError as http_err:
+            if '500 Server Error' in str(http_err) or '429 Client Error' in str(http_err):
+                log_and_print(f'Error encountered at getting usage on attempt {attempt+1}: {str(http_err)}. Retrying...')
+                time.sleep(5)
+                continue
+            else:
+                raise http_err
+        except Exception as err:
+            raise err
+    raise Exception(f"Failed to retrieve total usage after {retry_count} attempts")
 
 def is_glitched(api_key, usage_and_limits, plan_id, total_usage_formatted):
     current_timestamp = datetime.now().timestamp()
@@ -112,7 +125,18 @@ def check_key(api_key, retry_count=3):
     has_only_turbo = "gpt-3.5-turbo" in model_ids and not has_gpt_4
     
     try:
-        try_complete(api_key)
+        for attempts in range(retry_count):
+            try:
+                try_complete(api_key)
+                break
+            except Exception as e:
+                error_message = str(e)
+                if "The server is overloaded or not ready yet" in error_message:
+                    log_and_print(f'Error encountered when generating a completion on attempt {attempts+1}: {error_message}. Retrying...')
+                    time.sleep(5)
+                    continue
+                else:
+                    raise e
 
         glitched = is_glitched(api_key, usage_and_limits, plan_id, total_usage_formatted)
         if glitched:
@@ -127,13 +151,7 @@ def check_key(api_key, retry_count=3):
         result += f"  Total usage USD: {total_usage_formatted}\n"
     except Exception as e:
         error_message = str(e)
-        if "500 Server Error" in error_message or "The server is overloaded or not ready yet." in error_message:
-            if retry_count > 0:
-                time.sleep(5)
-                return check_key(api_key, retry_count - 1)
-            else:
-                result += f"{RED} Error after retries: {error_message}{RESET}\\n"
-        elif "You exceeded your current quota" in error_message:
+        if "You exceeded your current quota" in error_message:
             result += f"{YELLOW}  This key has exceeded its current quota{RESET}\n"
             result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
             result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
@@ -144,7 +162,7 @@ def check_key(api_key, retry_count=3):
         elif "Your account is not active" in error_message:
             result += f"{RED} Error: Your account is not active, please check your billing details on our website.{RESET}\n"
         else:
-            result += f"{RED} Unexpected Error: {error_message}{RESET}\n"
+            result += f"{RED} Unexpected Error at check_key: {error_message}{RESET}\n"
 
     return result, glitched, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted)
 
@@ -220,7 +238,7 @@ def checkkeys(api_keys):
                     result += f"{key}\n"
                     result += f"{RED} Error: This key is associated with a deactivated account. If you feel this is an error, contact us through our help center at help.openai.com.{RESET}\n"
                 else:
-                    result += f"{RED} Unexpected Error: {error_message}{RESET}\n"
+                    result += f"{RED} Unexpected Error at checkkeys: {error_message}{RESET}\n"
             result += '\n'
 
     with open('turbo.txt', 'w') as f:
