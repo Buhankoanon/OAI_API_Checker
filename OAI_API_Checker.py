@@ -29,6 +29,7 @@ def filter_models(models, desired_models):
 def get_limits(api_key):
     headers = {
         "authorization": f"Bearer {api_key}",
+        "Referer": "https://platform.openai.com/account/usage",
     }
     response = requests.get("https://api.openai.com/dashboard/billing/subscription", headers=headers)
 
@@ -36,50 +37,6 @@ def get_limits(api_key):
         return response.json()
     else:
         raise Exception(f"Error fetching limits: {response.text}")
-
-def get_total_usage(api_key, plan_id, retry_count=3):
-    if plan_id == "free":
-        start_date = (datetime.now() - timedelta(days=99)).strftime('%Y-%m-%d')
-    elif plan_id == "payg":
-        start_date = datetime.now().replace(day=1).strftime('%Y-%m-%d')
-    else:
-        raise ValueError(f"Invalid plan ID: {plan_id}")
-
-    end_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-  
-    usage_endpoint = 'https://api.openai.com/dashboard/billing/usage'
-    auth_header = {'Authorization': f'Bearer {api_key}'}
-    
-    for attempt in range(retry_count):
-        try:
-            response = requests.get(usage_endpoint, headers=auth_header, params={'start_date': start_date, 'end_date': end_date})
-            response.raise_for_status()
-            usage_data = response.json()
-            total_usage = usage_data.get('total_usage', 0) / 100
-            total_usage_formatted = '{:.2f}'.format(total_usage)
-            return total_usage_formatted
-        except requests.exceptions.HTTPError as http_err:
-            if '500 Server Error' in str(http_err) or '429 Client Error' in str(http_err):
-                logging.info(f'Error encountered at getting usage on attempt {attempt+1}: {str(http_err)}. Retrying...')
-                time.sleep(5)
-                continue
-            else:
-                raise http_err
-        except Exception as err:
-            raise err
-    raise Exception(f"Failed to retrieve total usage after {retry_count} attempts")
-
-def is_glitched(api_key, usage_and_limits, plan_id, total_usage_formatted):
-    current_timestamp = datetime.now().timestamp()
-    
-    if plan_id == "payg":
-        access_expired = False
-    else:
-        access_expired = current_timestamp > usage_and_limits['access_until']
-    
-    total_usage_formatted = get_total_usage(api_key, plan_id)
-    usage_exceeded = float(total_usage_formatted) > float(usage_and_limits['hard_limit_usd']) + 10
-    return access_expired or usage_exceeded
       
 def try_complete(api_key):
     openai.api_key = api_key
@@ -91,14 +48,13 @@ def try_complete(api_key):
 
 RED = "\033[31m"
 YELLOW = "\033[33m"
-GREEN = "\033[32m"
-BLINK = "\033[5m"
+#GREEN = "\033[32m"
+#BLINK = "\033[5m"
 RESET = "\033[0m"
 
 def check_key(api_key, retry_count=3):
     result = f"{api_key}\n"
     has_gpt_4_32k = False
-    glitched = False
     model_ids = []
     errors = []
     
@@ -107,9 +63,15 @@ def check_key(api_key, retry_count=3):
     plan_id = usage_and_limits.get('plan', {}).get('id')
     if not plan_id:
         raise ValueError("Plan ID not found in usage_and_limits")
-    total_usage_formatted = get_total_usage(api_key, plan_id)
     access_until = datetime.fromtimestamp(usage_and_limits['access_until'])
     org_id = usage_and_limits.get('account_name', '')
+    billing_country = usage_and_limits.get('billing_address', {}).get('country')
+    billing_city = usage_and_limits.get('billing_address', {}).get('city')
+    is_canceled = usage_and_limits.get('canceled', False)
+    canceled_at_raw = usage_and_limits.get('canceled_at')
+    canceled_at = datetime.fromtimestamp(canceled_at_raw) if canceled_at_raw is not None else None
+
+
     
     models = list_models(api_key)
     filtered_models = filter_models(models, desired_models)
@@ -139,34 +101,38 @@ def check_key(api_key, retry_count=3):
                 else:
                     raise e
 
-        glitched = is_glitched(api_key, usage_and_limits, plan_id, total_usage_formatted)
-        if glitched:
-            result += f"{GREEN}{BLINK}**!!!Possibly Glitched Key!!!**{RESET}\n"
-
         result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
         result += f"  Soft limit USD: {usage_and_limits['soft_limit_usd']}\n"
         result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
         result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
         result += f"  Plan: {plan_title}, {plan_id}\n"
         result += f"  OrgID: {org_id}\n"
-        result += f"  Total usage USD: {total_usage_formatted}\n"
+        result += f"  Adress: {billing_country}, {billing_city}\n"        
     except Exception as e:
         error_message = str(e)
-        if "You exceeded your current quota" in error_message:
+        if "You exceeded your current quota" in error_message and is_canceled:
+            result += f"{RED}  This key was canceled at {canceled_at}{RESET}\n"
+            result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
+            result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
+            result += f"  Plan: {plan_title}, {plan_id}\n"
+            result += f"  OrgID: {org_id}\n"
+            result += f"  Adress: {billing_country}, {billing_city}\n"
+        elif "You exceeded your current quota" in error_message and not is_canceled:
             result += f"{YELLOW}  This key has exceeded its current quota{RESET}\n"
             result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
             result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
             result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
             result += f"  Plan: {plan_title}, {plan_id}\n"
             result += f"  OrgID: {org_id}\n"
-            result += f"  Total usage USD: {total_usage_formatted}\n"
+            result += f"  Adress: {billing_country}, {billing_city}\n"
         elif "Your account is not active" in error_message:
             result += f"{RED} Error: Your account is not active, please check your billing details on our website.{RESET}\n"
         else:
             result += f"{RED} Unexpected Error at check_key: {error_message}{RESET}\n"
             errors.append((api_key, error_message))
 
-    return result, glitched, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), float(total_usage_formatted), errors
+    return result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), is_canceled, errors
 
 def checkkeys(api_keys):
     working_gpt_4_keys = set()
@@ -175,11 +141,7 @@ def checkkeys(api_keys):
     no_quota_gpt_4_32k_keys = set()
     working_only_turbo_keys = set()
     no_quota_only_turbo_keys = set()
-    glitched_gpt4_keys = set()
-    glitched_gpt4_32k_keys = set()
-    glitched_turbo_keys = set()
     result = ''
-    balances = []
     keys_by_limit = {}
     total_errors = []
     with ThreadPoolExecutor(max_workers=100) as executor:
@@ -189,11 +151,8 @@ def checkkeys(api_keys):
             result += f"API Key {idx}:\n"
             key = api_keys[idx - 1]
             try:
-                key_result, glitched, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, limit, usage, errors = future.result()
+                key_result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, limit, is_canceled, errors = future.result()
                 total_errors.extend(errors)
-                balance = max(limit - usage, 0)
-                balances.append(balance)
-
                 limit = ceil(limit / 10) * 10
                 
                 result += key_result
@@ -218,13 +177,6 @@ def checkkeys(api_keys):
                     same_limit_keys.append(key)
                     keys_by_limit[limit_key] = same_limit_keys
 
-                if glitched and has_gpt_4:
-                    glitched_gpt4_keys.add(key)
-                if glitched and has_gpt_4 and has_gpt_4_32k:
-                    glitched_gpt4_32k_keys.add(key)
-                if glitched and has_only_turbo:
-                    glitched_turbo_keys.add(key)
-
             except Exception as e:
                 error_message = str(e)
                 if "Incorrect API key provided" in error_message:
@@ -242,9 +194,6 @@ def checkkeys(api_keys):
             result += '\n'
 
     with open('turbo.txt', 'w') as f:
-        if len(glitched_turbo_keys) > 0:
-            f.write('Glitched API keys with GPT-3.5-Turbo model:\n')
-            f.write('\n'.join(glitched_turbo_keys) + '\n\n')
         if len(working_only_turbo_keys) > 0:
             f.write('Working API keys with GPT-3.5-Turbo model:\n')
             f.write('\n'.join(working_only_turbo_keys) + '\n\n')
@@ -253,12 +202,6 @@ def checkkeys(api_keys):
             f.write('\n'.join(no_quota_only_turbo_keys) + '\n\n')
 
     with open('gpt4.txt', 'w') as f:
-        if len(glitched_gpt4_32k_keys) > 0:
-            f.write('Glitched API keys with GPT-4-32K model:\n')
-            f.write('\n'.join(glitched_gpt4_32k_keys) + '\n\n')
-        if len(glitched_gpt4_keys) > 0:
-            f.write('Glitched API keys with GPT-4 model:\n')
-            f.write('\n'.join(glitched_gpt4_keys) + '\n\n')
         if len(working_gpt_4_32k_keys) > 0:
             f.write('Working API keys with GPT-4-32k model:\n')
             f.write('\n'.join(working_gpt_4_32k_keys) + '\n\n')
@@ -293,15 +236,6 @@ def checkkeys(api_keys):
     result += f"\nNumber of working API keys with 'gpt-4-32k' model: {len(working_gpt_4_32k_keys)}\n"
     for key in working_gpt_4_32k_keys:
         result += f"{key}\n"
-    result += f"\nNumber of possibly glitched API keys with only 'gpt-3.5-turbo' model: {len(glitched_turbo_keys)}\n"
-    for key in glitched_turbo_keys:
-        result += f"{key}\n"
-    result += f"\nNumber of possibly glitched API keys with 'gpt-4' model: {len(glitched_gpt4_keys)}\n"
-    for key in glitched_gpt4_keys:
-        result += f"{key}\n"
-    result += f"\nNumber of possibly glitched API keys with 'gpt-4-32k' model: {len(glitched_gpt4_32k_keys)}\n"
-    for key in glitched_gpt4_32k_keys:
-        result += f"{key}\n"
     result += f"\nNumber of valid API keys with only 'gpt-3.5-turbo' model and NO quota left: {len(no_quota_only_turbo_keys)}\n"
     for key in no_quota_only_turbo_keys:
         result += f"{key}\n"
@@ -311,8 +245,6 @@ def checkkeys(api_keys):
     result += f"\nNumber of valid API keys with 'gpt-4-32k' model and NO quota left: {len(no_quota_gpt_4_32k_keys)}\n"
     for key in no_quota_gpt_4_32k_keys:
         result += f"{key}\n"    
-    great_total = sum(balances)
-    result += f"\nTotal limit: {great_total:.2f}\n"
     
     return result
 
