@@ -59,16 +59,27 @@ def check_key(api_key, retry_count=3):
     errors = []
     
     usage_and_limits = get_limits(api_key)
-    plan_title = usage_and_limits.get('plan', {}).get('title')
-    plan_id = usage_and_limits.get('plan', {}).get('id')
-    if not plan_id:
-        raise ValueError("Plan ID not found in usage_and_limits")
+    if usage_and_limits is None:
+        logging.error(f"Failed to get usage and limits for API key {api_key}")
+        return
+    plan = usage_and_limits.get('plan')
+    if plan is None:
+        plan_title = ''
+        plan_id = ''
+    else:
+        plan_title = plan.get('title', '')
+        plan_id = plan.get('id', '')
     access_until = datetime.fromtimestamp(usage_and_limits['access_until'])
     org_id = usage_and_limits.get('account_name', '')
-    billing_country = usage_and_limits.get('billing_address', {}).get('country')
-    billing_city = usage_and_limits.get('billing_address', {}).get('city')
+    billing_address = usage_and_limits.get('billing_address', {})
+    if billing_address is not None:
+        billing_country = billing_address.get('country', '')
+        billing_city = billing_address.get('city', '')
+    else:
+        billing_country = ''
+        billing_city = ''
     is_canceled = usage_and_limits.get('canceled', False)
-    canceled_at_raw = usage_and_limits.get('canceled_at')
+    canceled_at_raw = usage_and_limits.get('canceled_at', '')
     canceled_at = datetime.fromtimestamp(canceled_at_raw) if canceled_at_raw is not None else None
 
 
@@ -132,7 +143,7 @@ def check_key(api_key, retry_count=3):
             result += f"{RED} Unexpected Error at check_key: {error_message}{RESET}\n"
             errors.append((api_key, error_message))
 
-    return result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), is_canceled, errors
+    return result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), errors
 
 def checkkeys(api_keys):
     working_gpt_4_keys = set()
@@ -151,7 +162,7 @@ def checkkeys(api_keys):
             result += f"API Key {idx}:\n"
             key = api_keys[idx - 1]
             try:
-                key_result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, limit, is_canceled, errors = future.result()
+                key_result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, limit, errors = future.result()
                 total_errors.extend(errors)
                 limit = ceil(limit / 10) * 10
                 
