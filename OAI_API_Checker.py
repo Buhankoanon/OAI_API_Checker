@@ -26,18 +26,6 @@ def list_models(api_key):
 def filter_models(models, desired_models):
     return [model for model in models if model in desired_models]
 
-def get_limits(api_key):
-    headers = {
-        "authorization": f"Bearer {api_key}",
-        "Referer": "https://platform.openai.com/account/usage",
-    }
-    response = requests.get("https://api.openai.com/dashboard/billing/subscription", headers=headers)
-
-    if response.status_code == 200:
-        return response.json()
-    else:
-        raise Exception(f"Error fetching limits: {response.text}")
-      
 def try_complete(api_key):
     openai.api_key = api_key
     response = openai.ChatCompletion.create(
@@ -57,33 +45,7 @@ def check_key(api_key, retry_count=3):
     has_gpt_4_32k = False
     model_ids = []
     errors = []
-    
-    usage_and_limits = get_limits(api_key)
-    if usage_and_limits is None:
-        logging.error(f"Failed to get usage and limits for API key {api_key}")
-        return
-    plan = usage_and_limits.get('plan')
-    if plan is None:
-        plan_title = ''
-        plan_id = ''
-    else:
-        plan_title = plan.get('title', '')
-        plan_id = plan.get('id', '')
-    access_until = datetime.fromtimestamp(usage_and_limits['access_until'])
-    org_id = usage_and_limits.get('account_name', '')
-    billing_address = usage_and_limits.get('billing_address', {})
-    if billing_address is not None:
-        billing_country = billing_address.get('country', '')
-        billing_city = billing_address.get('city', '')
-    else:
-        billing_country = ''
-        billing_city = ''
-    is_canceled = usage_and_limits.get('canceled', False)
-    canceled_at_raw = usage_and_limits.get('canceled_at', '')
-    canceled_at = datetime.fromtimestamp(canceled_at_raw) if canceled_at_raw is not None else None
 
-
-    
     models = list_models(api_key)
     filtered_models = filter_models(models, desired_models)
 
@@ -112,38 +74,17 @@ def check_key(api_key, retry_count=3):
                 else:
                     raise e
 
-        result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        result += f"  Soft limit USD: {usage_and_limits['soft_limit_usd']}\n"
-        result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
-        result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
-        result += f"  Plan: {plan_title}, {plan_id}\n"
-        result += f"  OrgID: {org_id}\n"
-        result += f"  Adress: {billing_country}, {billing_city}\n"        
     except Exception as e:
         error_message = str(e)
-        if "You exceeded your current quota" in error_message and is_canceled:
-            result += f"{RED}  This key was canceled at {canceled_at}{RESET}\n"
-            result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
-            result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
-            result += f"  Plan: {plan_title}, {plan_id}\n"
-            result += f"  OrgID: {org_id}\n"
-            result += f"  Adress: {billing_country}, {billing_city}\n"
-        elif "You exceeded your current quota" in error_message and not is_canceled:
+        if "You exceeded your current quota" in error_message:
             result += f"{YELLOW}  This key has exceeded its current quota{RESET}\n"
-            result += f"  Access valid until: {access_until.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            result += f"  Hard limit USD: {usage_and_limits['hard_limit_usd']}\n"
-            result += f"  System hard limit USD: {usage_and_limits['system_hard_limit_usd']}\n"
-            result += f"  Plan: {plan_title}, {plan_id}\n"
-            result += f"  OrgID: {org_id}\n"
-            result += f"  Adress: {billing_country}, {billing_city}\n"
         elif "Your account is not active" in error_message:
             result += f"{RED} Error: Your account is not active, please check your billing details on our website.{RESET}\n"
         else:
             result += f"{RED} Unexpected Error at check_key: {error_message}{RESET}\n"
             errors.append((api_key, error_message))
 
-    return result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, float(usage_and_limits['hard_limit_usd']), errors
+    return result, has_gpt_4, has_gpt_4_32k, has_only_turbo, errors
 
 def checkkeys(api_keys):
     working_gpt_4_keys = set()
@@ -153,7 +94,6 @@ def checkkeys(api_keys):
     working_only_turbo_keys = set()
     no_quota_only_turbo_keys = set()
     result = ''
-    keys_by_limit = {}
     total_errors = []
     with ThreadPoolExecutor(max_workers=100) as executor:
         futures = [executor.submit(check_key, api_key) for api_key in api_keys]
@@ -162,9 +102,8 @@ def checkkeys(api_keys):
             result += f"API Key {idx}:\n"
             key = api_keys[idx - 1]
             try:
-                key_result, has_gpt_4, has_gpt_4_32k, has_only_turbo, org_id, limit, errors = future.result()
+                key_result, has_gpt_4, has_gpt_4_32k, has_only_turbo, errors = future.result()
                 total_errors.extend(errors)
-                limit = ceil(limit / 10) * 10
                 
                 result += key_result
 
@@ -181,12 +120,6 @@ def checkkeys(api_keys):
                     no_quota_gpt_4_keys.add(key)
                 if has_gpt_4_32k and "This key has exceeded its current quota" in key_result:
                     no_quota_gpt_4_32k_keys.add(key)
-
-                if "Error" not in key_result and "This key has exceeded its current quota" not in key_result and "This key is invalid or revoked" not in key_result:
-                    limit_key = limit * 10 + (4 if has_gpt_4 else 3)
-                    same_limit_keys = keys_by_limit.get(limit_key, [])
-                    same_limit_keys.append(key)
-                    keys_by_limit[limit_key] = same_limit_keys
 
             except Exception as e:
                 error_message = str(e)
@@ -225,12 +158,6 @@ def checkkeys(api_keys):
         if len(no_quota_gpt_4_keys) > 0:
             f.write('Valid API keys with GPT-4 model and no quota left:\n')
             f.write('\n'.join(no_quota_gpt_4_keys) + '\n\n')
-
-    with open('limits.txt', 'w') as f:
-        for limit, same_limit_keys in sorted(keys_by_limit.items(), key=lambda x: x[0]):
-            f.write(f'{limit}:\n')
-            f.write('\n'.join(same_limit_keys))
-            f.write(f'\n\n')
 
     with open('unexpected_errors.txt', 'w') as f:
         for i, (api_key, error) in enumerate(total_errors, start=1):
