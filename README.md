@@ -5,7 +5,7 @@
 
 Basically, you put in one or an array of keys and the program analyzes them for you.
 
-It prints out if the key is glitched (detects most glitched keys with very high accuracy), if gpt-4 is accessible and lots of other info, including key limits, usage, and expiration date. It will also store the gpt-4, turbo keys and their limits in their respective .txt files in the folder where you run the program.
+It prints out what models are available for the key and if it is out of quota or not. It will also store the gpt-4 and turbo keys in their respective .txt files in the folder where you run the program.
 
 Program is pretty fast and reliable. Just in case, the program will generate a .log file where all debug info will be stored. Feel free to send them to me in case of bugs and errors (buhankoanon@proton.me).
 
