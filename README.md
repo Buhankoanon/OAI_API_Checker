@@ -1,6 +1,8 @@
 # OAI API Checker
 ## Program that allows you to check all the available information about your OAI API keys
 
+!!**Out of date for now, use kkc instead in the meantime: https://github.com/CncAnon1/kkc**!!
+
 **Download**: OAI_API_Checker.exe - https://drive.proton.me/urls/4T2QGJFBGM#fW0YsN9WskCG
 
 Basically, you put in one or an array of keys and the program analyzes them for you.
